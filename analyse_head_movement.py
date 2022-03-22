@@ -19,6 +19,8 @@ class Recording(object):
         self.head_positions = []
         self.head_rotations = []
         self.time_stamps    = []
+        self.head_movement_speeds = []
+        self.head_rotation_speeds = []
 
 
 def read_file(filename):
@@ -96,6 +98,11 @@ def calculate_mean_head_speed(rec):
         time_diff    = time - last_time
         displacement = np.linalg.norm(pos - last_pos)
 
+        speed=0.0
+        if time_diff > 0.0:
+            speed = displacement / time_diff
+        rec.head_movement_speeds.append(speed)
+
         accum_time += time_diff
         accum_dist += displacement
 
@@ -133,6 +140,11 @@ def calculate_mean_head_rotation_speed(rec):
 
         time_diff = time - last_time
         angular_displacement = angle_between_quaternions(rot, last_rot)
+
+        rot_speed=0.0
+        if time_diff > 0.0:
+            rot_speed = angular_displacement / time_diff
+        rec.head_rotation_speeds.append(rot_speed)
 
         accum_time += time_diff
         accum_rot += angular_displacement
@@ -177,10 +189,17 @@ non_spatial_speed = 0
 non_spatial_rot_speed = 0
 non_spatial_duration = 0
 
+all_mean_spatial_speed = []
+all_mean_spatial_rot_speed = []
+all_mean_non_spatial_speed = []
+all_mean_non_spatial_rot_speed = []
+
+
 all_spatial_speed = []
 all_spatial_rot_speed = []
 all_non_spatial_speed = []
 all_non_spatial_rot_speed = []
+
 
 
 with open(output_path, 'w', newline='') as f:
@@ -196,29 +215,45 @@ with open(output_path, 'w', newline='') as f:
                 filename=data_base_path+"dyad_" + str(dyad) + "_partner" + str(partner) + "_trial" + str(trial) + "_" + "Head" + "_track.csv"
                 recording = read_file(filename)
 
+
                 duration =  recording.time_stamps[-1] - recording.time_stamps[0] 
                 speed = calculate_mean_head_speed(recording)
                 rot_speed = calculate_mean_head_rotation_speed(recording)
                 condition = get_condition(dyad, trial)
+
+                # print("found " + str(len(recording.head_positions)) + " head positions")
+                # print("found " + str(len(recording.head_movement_speeds)) + " head movement speeds")
+                
+                # print("found " + str(len(recording.head_rotations)) + " head rotations")
+                # print("found " + str(len(recording.head_rotation_speeds)) + " head rotation speeds")
+                
 
                 if condition == Condition.SPATIAL:
                     spatial_speed += (speed*duration)
                     spatial_rot_speed += (rot_speed*duration)
                     spatial_duration += duration
 
-                    all_spatial_speed.append(speed)
-                    all_spatial_rot_speed.append(rot_speed)
+                    all_mean_spatial_speed.append(speed)
+                    all_mean_spatial_rot_speed.append(rot_speed)
+
+                    if speed > 0:
+                        all_spatial_speed.extend(recording.head_movement_speeds)
+                        all_spatial_rot_speed.extend(recording.head_rotation_speeds)
 
                 elif condition == Condition.NO_SPATIAL:
                     non_spatial_speed += (speed*duration)
                     non_spatial_rot_speed += (rot_speed*duration)
                     non_spatial_duration += duration
 
-                    all_non_spatial_speed.append(speed)
-                    all_non_spatial_rot_speed.append(rot_speed)
+                    all_mean_non_spatial_speed.append(speed)
+                    all_mean_non_spatial_rot_speed.append(rot_speed)
+
+                    if speed > 0:
+                        all_non_spatial_speed.extend(recording.head_movement_speeds)
+                        all_non_spatial_rot_speed.extend(recording.head_rotation_speeds)
 
                 writer.writerow([dyad, partner, trial, duration, speed, rot_speed, condition])
-
+                
 
 spatial_speed /= spatial_duration
 spatial_rot_speed /= spatial_duration
@@ -239,15 +274,15 @@ with open('data/head_movement_speed.csv', 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(['SPATIAL', 'NO_SPATIAL'])
 
-    for i in range(0, max(len(all_spatial_speed), len(all_non_spatial_speed))):
+    for i in range(0, max(len(all_mean_spatial_speed), len(all_mean_non_spatial_speed))):
         
         sp_speed = 0
         nsp_speed = 0
 
-        if (i < len(all_spatial_speed)):
-            sp_speed = all_spatial_speed[i]
-        if (i < len(all_non_spatial_speed)):
-                nsp_speed = all_non_spatial_speed[i]
+        if (i < len(all_mean_spatial_speed)):
+            sp_speed = all_mean_spatial_speed[i]
+        if (i < len(all_mean_non_spatial_speed)):
+                nsp_speed = all_mean_non_spatial_speed[i]
         
         writer.writerow([sp_speed, nsp_speed])
 
@@ -255,14 +290,37 @@ with open('data/head_rotation_speed.csv', 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(['SPATIAL', 'NO_SPATIAL'])
 
-    for i in range(0, max(len(all_spatial_rot_speed), len(all_non_spatial_rot_speed))):
+    for i in range(0, max(len(all_mean_spatial_rot_speed), len(all_mean_non_spatial_rot_speed))):
         
         sp_rot_speed = 0
         nsp_rot_speed = 0
 
-        if (i < len(all_spatial_rot_speed)):
-            sp_rot_speed = all_spatial_rot_speed[i]
-        if (i < len(all_non_spatial_rot_speed)):
-                nsp_rot_speed = all_non_spatial_rot_speed[i]
+        if (i < len(all_mean_spatial_rot_speed)):
+            sp_rot_speed = all_mean_spatial_rot_speed[i]
+        if (i < len(all_mean_non_spatial_rot_speed)):
+                nsp_rot_speed = all_mean_non_spatial_rot_speed[i]
         
         writer.writerow([sp_rot_speed, nsp_rot_speed])
+
+
+with open('data/all_head_movement_speed_spatial.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    for s in all_spatial_speed:
+        writer.writerow([s])
+        
+with open('data/all_head_movement_speed_nonspatial.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    for s in all_non_spatial_speed:
+        writer.writerow([s])
+        
+with open('data/all_head_rotation_speed_spatial.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    for s in all_spatial_rot_speed:
+        writer.writerow([s])
+        
+with open('data/all_head_rotation_speed_nonspatial.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    for s in all_non_spatial_rot_speed:
+        writer.writerow([s])
+        
+
